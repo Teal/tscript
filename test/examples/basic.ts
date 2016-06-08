@@ -1,1 +1,7 @@
-[{a: 1}]
+export function a() {
+
+}
+
+export function b() {
+    a();
+}

@@ -5,11 +5,9 @@
 			"name": "启动",
 			"type": "node",
 			"request": "launch",
-			"program": "${workspaceRoot}/bin/tdoc",
+			"program": "${workspaceRoot}/test/basic.js",
 			"stopOnEntry": false,
-			"args": [
-				"basic/basic.ts"
-			],
+			"args": [],
 			"timeout": 30000,
 			"cwd": "${workspaceRoot}/test",
 			"preLaunchTask": null,

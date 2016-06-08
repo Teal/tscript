@@ -12,9 +12,10 @@
     "url": "git://github.com/teal/tscript"
   },
   "bugs": {
-    "url": "https://github.com/teal/tscript/issues",
-    "email": "xuld@vip.qq.com"
+      "url": "https://github.com/teal/tscript/issues",
+      "email": "xuld@vip.qq.com"
   },
+  "main": "lib/index.js",
   "author": {
     "name": "xuld",
     "email": "xuld@vip.qq.com"

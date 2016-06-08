@@ -1,50 +1,47 @@
 ﻿
 import * as ts from "typescript";
-import {NodeVisitor} from "./visitor";
 
 /**
- * 表示一个语法树转换器。
+ * 扩展的编译选项。
  */
-class Translator extends NodeVisitor {
-
-    /**
-     * 存储当前正在解析的程序。
-     */
-    private _program: ts.Program;
-
-    /**
-     * 存储当前使用的语义分析器。
-     */
-    private _checker: ts.TypeChecker;
-
-    /**
-     * 转换现有的语法树。
-     * @param program 要转换的程序。
-     */
-    process(program: ts.Program) {
-        this._program = program;
-        this._checker = program.getTypeChecker();
-        super.process(program);
-    }
-
-    protected visitIdentifier(node: ts.Identifier) {
-        return node;
-    }
+interface CompilerOptions extends ts.CompilerOptions {
 
 }
 
-// 在编译后添加操作。
-addCallback(ts, 'createProgram', (program: ts.Program) => {
-    new Translator().process(program);
-});
+// 重写 createProgram 函数以添加转换。
+const createProgram = ts.createProgram;
+ts.createProgram = function (rootNames: string[], options: CompilerOptions, host?: ts.CompilerHost, oldProgram?: ts.Program) {
+    const program = createProgram.apply(this, arguments);
+    const checker = program.getTypeChecker();
 
-function addCallback(obj: any, methodName: string, callback: Function) {
-    const oldMethod = obj[methodName];
-    obj[methodName] = function () {
-        const result = oldMethod.apply(this, arguments);
-        callback.call(this, result);
-        return result;
-    };
+    // 处理每个源文件。
+    for (const sourceFile of program.getSourceFiles()) {
+        if (!ts.isExternalModule(sourceFile)) {
+            visitSourceFile(sourceFile);
+        }
+    }
+
+    /**
+     * 处理一个文件。
+     * @param sourceFile 要处理的文件。
+     */
+    function visitSourceFile(sourceFile: ts.SourceFile) {
+
+    }
+
+    return program;
+};
+
+/**
+ * 遍历一个节点及子节点，并执行 *callback*。
+ * @param node 要遍历的父节点。
+ * @param callback 回调函数。如果函数返回 false，则不再继续遍历子节点，否则将继续遍历。
+ */
+function eachChildDescendent(node: ts.Node, callback: (node: ts.Node) => boolean) {
+    ts.forEachChild(node, childNode => {
+        if (callback(childNode) === false) return;
+        eachChildDescendent(childNode, callback);
+    });
 }
 
 export = ts;

@@ -1,0 +1,26 @@
+{
+  "name": "tscript",
+  "version": "0.0.1",
+  "description": "编译 EcmaScript 7 和 TypeScript 到 JavaScript。| Compile EcmaScript 7 And TypeScript to javascript.",
+  "keywords": [
+    "js",
+    "ts",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/teal/tscript"
+  },
+  "bugs": {
+    "url": "https://github.com/teal/tscript/issues",
+    "email": "xuld@vip.qq.com"
+  },
+  "author": {
+    "name": "xuld",
+    "email": "xuld@vip.qq.com"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "typescript": "^1.8.10"
+  }
+}

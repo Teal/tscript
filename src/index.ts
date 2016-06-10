@@ -20,7 +20,8 @@ ts.createProgram = function (rootNames: string[], options: CompilerOptions, host
     // 设置默认选项。
     options.noImplicitUseStrict = options.noImplicitUseStrict !== false;
 
-    const program = createProgram.apply(this, arguments);
+    // 编译。
+    const program = createProgram.apply(this, arguments) as ts.Program;
     const checker = program.getTypeChecker();
 
     // 处理每个源文件。
@@ -47,20 +48,44 @@ ts.createProgram = function (rootNames: string[], options: CompilerOptions, host
          */
         function removeUnusedExports(usedExports: string[]) {
 
-            sourceFile.statements[0] = ts.createNode(ts.SyntaxKind.EmptyStatement);
+            // 第一步：遍历并找出所有导出函数的依赖关系。
 
-            // console.log(sourceFile.statements[0].getText())
+            ts.forEachChild(sourceFile, findReferences);
+            mapChild(sourceFile, processNode);
 
+            function findReferences(node: ts.Node) {
+                switch (node.kind) {
+                    case ts.SyntaxKind.CallExpression:
+                    case ts.SyntaxKind.NewExpression:
+                    case ts.SyntaxKind.TaggedTemplateExpression:
+                    case ts.SyntaxKind.Decorator:
+                        const signature = checker.getResolvedSignature((node as ts.CallLikeExpression));
+                        console.log("调用", signature.declaration.getText());
+                        break;
+                    case ts.SyntaxKind.Identifier:
+                        //const symbol = checker.getSymbolAtLocation(node);
+                        //console.log("变量=", symbol.valueDeclaration.getText());
+                        break;
+                }
 
-            //eachChildDescendent(sourceFile, node => {
-            //    if (node.flags & ts.NodeFlags.Export) {
-            //        console.log("AA", node.getText(sourceFile));
+                ts.forEachChild(node, findReferences);
+            }
 
+            function processNode(node: ts.Node) {
+                //if (!node) return;
 
-            //    }
+                if (node.flags & ts.NodeFlags.Export) {
+                    //if ((node as ts.FunctionDeclaration).name.text == "a") {
+                    //    (node as ts.FunctionDeclaration).name = ts.createNode(ts.SyntaxKind.Identifier) as ts.Identifier;
+                    //    (node as ts.FunctionDeclaration).name.text = "___g";
+                    //}
+                }
 
-            //    return true;
-            //});
+                mapChild(node, processNode);
+
+                return node;
+            }
+
         }
 
     }
@@ -89,36 +114,38 @@ function mapChild(node: ts.Node, callback: typeof MapCallback) {
             return;
         case ts.SyntaxKind.ShorthandPropertyAssignment:
             mapArray(node.decorators, callback);
-            return visitNodes(cbNodes, node.decorators) ||
-                visitNodes(cbNodes, node.modifiers) ||
-                visitNode(cbNode, (<ts.ShorthandPropertyAssignment>node).name) ||
-                visitNode(cbNode, (<ts.ShorthandPropertyAssignment>node).questionToken) ||
-                visitNode(cbNode, (<ts.ShorthandPropertyAssignment>node).equalsToken) ||
-                visitNode(cbNode, (<ts.ShorthandPropertyAssignment>node).objectAssignmentInitializer);
+            mapArray(node.modifiers, callback);
+            (<ts.ShorthandPropertyAssignment>node).name = callback((<ts.ShorthandPropertyAssignment>node).name);
+            (<ts.ShorthandPropertyAssignment>node).questionToken = callback((<ts.ShorthandPropertyAssignment>node).questionToken);
+            (<ts.ShorthandPropertyAssignment>node).equalsToken = callback((<ts.ShorthandPropertyAssignment>node).equalsToken);
+            (<ts.ShorthandPropertyAssignment>node).objectAssignmentInitializer = callback((<ts.ShorthandPropertyAssignment>node).objectAssignmentInitializer);
+            return;
         case ts.SyntaxKind.Parameter:
         case ts.SyntaxKind.PropertyDeclaration:
         case ts.SyntaxKind.PropertySignature:
         case ts.SyntaxKind.PropertyAssignment:
         case ts.SyntaxKind.VariableDeclaration:
         case ts.SyntaxKind.BindingElement:
-            return visitNodes(cbNodes, node.decorators) ||
-                visitNodes(cbNodes, node.modifiers) ||
-                visitNode(cbNode, (<ts.VariableLikeDeclaration>node).propertyName) ||
-                visitNode(cbNode, (<ts.VariableLikeDeclaration>node).dotDotDotToken) ||
-                visitNode(cbNode, (<ts.VariableLikeDeclaration>node).name) ||
-                visitNode(cbNode, (<ts.VariableLikeDeclaration>node).questionToken) ||
-                visitNode(cbNode, (<ts.VariableLikeDeclaration>node).type) ||
-                visitNode(cbNode, (<ts.VariableLikeDeclaration>node).initializer);
+            mapArray(node.decorators, callback);
+            mapArray(node.modifiers, callback);
+            (<ts.VariableLikeDeclaration>node).propertyName = callback((<ts.VariableLikeDeclaration>node).propertyName);
+            (<ts.VariableLikeDeclaration>node).dotDotDotToken = callback((<ts.VariableLikeDeclaration>node).dotDotDotToken);
+            (<ts.VariableLikeDeclaration>node).name = callback((<ts.VariableLikeDeclaration>node).name);
+            (<ts.VariableLikeDeclaration>node).questionToken = callback((<ts.VariableLikeDeclaration>node).questionToken);
+            (<ts.VariableLikeDeclaration>node).type = callback((<ts.VariableLikeDeclaration>node).type);
+            (<ts.VariableLikeDeclaration>node).initializer = callback((<ts.VariableLikeDeclaration>node).initializer);
+            return;
         case ts.SyntaxKind.FunctionType:
         case ts.SyntaxKind.ConstructorType:
         case ts.SyntaxKind.CallSignature:
         case ts.SyntaxKind.ConstructSignature:
         case ts.SyntaxKind.IndexSignature:
-            return visitNodes(cbNodes, node.decorators) ||
-                visitNodes(cbNodes, node.modifiers) ||
-                visitNodes(cbNodes, (<ts.SignatureDeclaration>node).typeParameters) ||
-                visitNodes(cbNodes, (<ts.SignatureDeclaration>node).parameters) ||
-                visitNode(cbNode, (<ts.SignatureDeclaration>node).type);
+            mapArray(node.decorators, callback);
+            mapArray(node.modifiers, callback);
+            mapArray((<ts.SignatureDeclaration>node).typeParameters, callback);
+            mapArray((<ts.SignatureDeclaration>node).parameters, callback);
+            (<ts.SignatureDeclaration>node).type = callback((<ts.SignatureDeclaration>node).type);
+            return;
         case ts.SyntaxKind.MethodDeclaration:
         case ts.SyntaxKind.MethodSignature:
         case ts.SyntaxKind.Constructor:
@@ -127,317 +154,404 @@ function mapChild(node: ts.Node, callback: typeof MapCallback) {
         case ts.SyntaxKind.FunctionExpression:
         case ts.SyntaxKind.FunctionDeclaration:
         case ts.SyntaxKind.ArrowFunction:
-            return visitNodes(cbNodes, node.decorators) ||
-                visitNodes(cbNodes, node.modifiers) ||
-                visitNode(cbNode, (<ts.FunctionLikeDeclaration>node).asteriskToken) ||
-                visitNode(cbNode, (<ts.FunctionLikeDeclaration>node).name) ||
-                visitNode(cbNode, (<ts.FunctionLikeDeclaration>node).questionToken) ||
-                visitNodes(cbNodes, (<ts.FunctionLikeDeclaration>node).typeParameters) ||
-                visitNodes(cbNodes, (<ts.FunctionLikeDeclaration>node).parameters) ||
-                visitNode(cbNode, (<ts.FunctionLikeDeclaration>node).type) ||
-                visitNode(cbNode, (<ts.ArrowFunction>node).equalsGreaterThanToken) ||
-                visitNode(cbNode, (<ts.FunctionLikeDeclaration>node).body);
+            mapArray(node.decorators, callback);
+            mapArray(node.modifiers, callback);
+            (<ts.FunctionLikeDeclaration>node).asteriskToken = (<ts.FunctionLikeDeclaration>node).asteriskToken && callback((<ts.FunctionLikeDeclaration>node).asteriskToken);
+            (<ts.FunctionLikeDeclaration>node).name = callback((<ts.FunctionLikeDeclaration>node).name);
+            (<ts.FunctionLikeDeclaration>node).questionToken = (<ts.FunctionLikeDeclaration>node).questionToken && callback((<ts.FunctionLikeDeclaration>node).questionToken);
+            mapArray((<ts.FunctionLikeDeclaration>node).typeParameters, callback);
+            mapArray((<ts.FunctionLikeDeclaration>node).parameters, callback);
+            (<ts.FunctionLikeDeclaration>node).type = (<ts.FunctionLikeDeclaration>node).type && callback((<ts.FunctionLikeDeclaration>node).type);
+            (<ts.ArrowFunction>node).equalsGreaterThanToken = (<ts.ArrowFunction>node).equalsGreaterThanToken && callback((<ts.ArrowFunction>node).equalsGreaterThanToken);
+            (<ts.FunctionLikeDeclaration>node).body = (<ts.FunctionLikeDeclaration>node).body && callback((<ts.FunctionLikeDeclaration>node).body);
+            return;
         case ts.SyntaxKind.TypeReference:
-            return visitNode(cbNode, (<ts.TypeReferenceNode>node).typeName) ||
-                visitNodes(cbNodes, (<ts.TypeReferenceNode>node).typeArguments);
+            (<ts.TypeReferenceNode>node).typeName = callback((<ts.TypeReferenceNode>node).typeName);
+            mapArray((<ts.TypeReferenceNode>node).typeArguments, callback);
+            return;
         case ts.SyntaxKind.TypePredicate:
-            return visitNode(cbNode, (<ts.TypePredicateNode>node).parameterName) ||
-                visitNode(cbNode, (<ts.TypePredicateNode>node).type);
+            (<ts.TypePredicateNode>node).parameterName = callback((<ts.TypePredicateNode>node).parameterName);
+            (<ts.TypePredicateNode>node).type = callback((<ts.TypePredicateNode>node).type);
+            return;
         case ts.SyntaxKind.TypeQuery:
-            return visitNode(cbNode, (<ts.TypeQueryNode>node).exprName);
+            (<ts.TypeQueryNode>node).exprName = callback((<ts.TypeQueryNode>node).exprName);
+            return;
         case ts.SyntaxKind.TypeLiteral:
-            return visitNodes(cbNodes, (<ts.TypeLiteralNode>node).members);
+            mapArray((<ts.TypeLiteralNode>node).members, callback);
+            return;
         case ts.SyntaxKind.ArrayType:
-            return visitNode(cbNode, (<ts.ArrayTypeNode>node).elementType);
+            (<ts.ArrayTypeNode>node).elementType = callback((<ts.ArrayTypeNode>node).elementType);
+            return;
         case ts.SyntaxKind.TupleType:
-            return visitNodes(cbNodes, (<ts.TupleTypeNode>node).elementTypes);
+            mapArray((<ts.TupleTypeNode>node).elementTypes, callback);
+            return;
         case ts.SyntaxKind.UnionType:
         case ts.SyntaxKind.IntersectionType:
-            return visitNodes(cbNodes, (<ts.UnionOrIntersectionTypeNode>node).types);
+            mapArray((<ts.UnionOrIntersectionTypeNode>node).types, callback);
+            return;
         case ts.SyntaxKind.ParenthesizedType:
-            return visitNode(cbNode, (<ts.ParenthesizedTypeNode>node).type);
+            (<ts.ParenthesizedTypeNode>node).type = callback((<ts.ParenthesizedTypeNode>node).type);
+            return;
         case ts.SyntaxKind.ObjectBindingPattern:
         case ts.SyntaxKind.ArrayBindingPattern:
-            return visitNodes(cbNodes, (<ts.BindingPattern>node).elements);
+            mapArray((<ts.BindingPattern>node).elements, callback);
+            return;
         case ts.SyntaxKind.ArrayLiteralExpression:
-            return visitNodes(cbNodes, (<ts.ArrayLiteralExpression>node).elements);
+            mapArray((<ts.ArrayLiteralExpression>node).elements, callback);
+            return;
         case ts.SyntaxKind.ObjectLiteralExpression:
-            return visitNodes(cbNodes, (<ts.ObjectLiteralExpression>node).properties);
+            mapArray((<ts.ObjectLiteralExpression>node).properties, callback);
+            return;
         case ts.SyntaxKind.PropertyAccessExpression:
-            return visitNode(cbNode, (<ts.PropertyAccessExpression>node).expression) ||
-                visitNode(cbNode, (<ts.PropertyAccessExpression>node).dotToken) ||
-                visitNode(cbNode, (<ts.PropertyAccessExpression>node).name);
+            (<ts.PropertyAccessExpression>node).expression = callback((<ts.PropertyAccessExpression>node).expression);
+            (<ts.PropertyAccessExpression>node).dotToken = callback((<ts.PropertyAccessExpression>node).dotToken);
+            (<ts.PropertyAccessExpression>node).name = callback((<ts.PropertyAccessExpression>node).name);
+            return;
         case ts.SyntaxKind.ElementAccessExpression:
-            return visitNode(cbNode, (<ts.ElementAccessExpression>node).expression) ||
-                visitNode(cbNode, (<ts.ElementAccessExpression>node).argumentExpression);
+            (<ts.ElementAccessExpression>node).expression = callback((<ts.ElementAccessExpression>node).expression);
+            (<ts.ElementAccessExpression>node).argumentExpression = callback((<ts.ElementAccessExpression>node).argumentExpression);
+            return;
         case ts.SyntaxKind.CallExpression:
         case ts.SyntaxKind.NewExpression:
-            return visitNode(cbNode, (<ts.CallExpression>node).expression) ||
-                visitNodes(cbNodes, (<ts.CallExpression>node).typeArguments) ||
-                visitNodes(cbNodes, (<ts.CallExpression>node).arguments);
+            (<ts.CallExpression>node).expression = callback((<ts.CallExpression>node).expression);
+            mapArray((<ts.CallExpression>node).typeArguments, callback);
+            mapArray((<ts.CallExpression>node).arguments, callback);
+            return;
         case ts.SyntaxKind.TaggedTemplateExpression:
-            return visitNode(cbNode, (<ts.TaggedTemplateExpression>node).tag) ||
-                visitNode(cbNode, (<ts.TaggedTemplateExpression>node).template);
+            (<ts.TaggedTemplateExpression>node).tag = callback((<ts.TaggedTemplateExpression>node).tag);
+            (<ts.TaggedTemplateExpression>node).template = callback((<ts.TaggedTemplateExpression>node).template);
+            return;
         case ts.SyntaxKind.TypeAssertionExpression:
-            return visitNode(cbNode, (<ts.TypeAssertion>node).type) ||
-                visitNode(cbNode, (<ts.TypeAssertion>node).expression);
+            (<ts.TypeAssertion>node).type = callback((<ts.TypeAssertion>node).type);
+            (<ts.TypeAssertion>node).expression = callback((<ts.TypeAssertion>node).expression);
+            return;
         case ts.SyntaxKind.ParenthesizedExpression:
-            return visitNode(cbNode, (<ts.ParenthesizedExpression>node).expression);
+            (<ts.ParenthesizedExpression>node).expression = callback((<ts.ParenthesizedExpression>node).expression);
+            return;
         case ts.SyntaxKind.DeleteExpression:
-            return visitNode(cbNode, (<ts.DeleteExpression>node).expression);
+            (<ts.DeleteExpression>node).expression = callback((<ts.DeleteExpression>node).expression);
+            return;
         case ts.SyntaxKind.TypeOfExpression:
-            return visitNode(cbNode, (<ts.TypeOfExpression>node).expression);
+            (<ts.TypeOfExpression>node).expression = callback((<ts.TypeOfExpression>node).expression);
+            return;
         case ts.SyntaxKind.VoidExpression:
-            return visitNode(cbNode, (<ts.VoidExpression>node).expression);
+            (<ts.VoidExpression>node).expression = callback((<ts.VoidExpression>node).expression);
+            return;
         case ts.SyntaxKind.PrefixUnaryExpression:
-            return visitNode(cbNode, (<ts.PrefixUnaryExpression>node).operand);
+            (<ts.PrefixUnaryExpression>node).operand = callback((<ts.PrefixUnaryExpression>node).operand);
+            return;
         case ts.SyntaxKind.YieldExpression:
-            return visitNode(cbNode, (<ts.YieldExpression>node).asteriskToken) ||
-                visitNode(cbNode, (<ts.YieldExpression>node).expression);
+            (<ts.YieldExpression>node).asteriskToken = callback((<ts.YieldExpression>node).asteriskToken);
+            (<ts.YieldExpression>node).expression = callback((<ts.YieldExpression>node).expression);
+            return;
         case ts.SyntaxKind.AwaitExpression:
-            return visitNode(cbNode, (<ts.AwaitExpression>node).expression);
+            (<ts.AwaitExpression>node).expression = callback((<ts.AwaitExpression>node).expression);
+            return;
         case ts.SyntaxKind.PostfixUnaryExpression:
-            return visitNode(cbNode, (<ts.PostfixUnaryExpression>node).operand);
+            (<ts.PostfixUnaryExpression>node).operand = callback((<ts.PostfixUnaryExpression>node).operand);
+            return;
         case ts.SyntaxKind.BinaryExpression:
-            return visitNode(cbNode, (<ts.BinaryExpression>node).left) ||
-                visitNode(cbNode, (<ts.BinaryExpression>node).operatorToken) ||
-                visitNode(cbNode, (<ts.BinaryExpression>node).right);
+            (<ts.BinaryExpression>node).left = callback((<ts.BinaryExpression>node).left);
+            (<ts.BinaryExpression>node).operatorToken = callback((<ts.BinaryExpression>node).operatorToken);
+            (<ts.BinaryExpression>node).right = callback((<ts.BinaryExpression>node).right);
+            return;
         case ts.SyntaxKind.AsExpression:
-            return visitNode(cbNode, (<ts.AsExpression>node).expression) ||
-                visitNode(cbNode, (<ts.AsExpression>node).type);
-        case ts.SyntaxKind.NonNullExpression:
-            return visitNode(cbNode, (<ts.NonNullExpression>node).expression);
+            (<ts.AsExpression>node).expression = callback((<ts.AsExpression>node).expression);
+            (<ts.AsExpression>node).type = callback((<ts.AsExpression>node).type);
+            return;
         case ts.SyntaxKind.ConditionalExpression:
-            return visitNode(cbNode, (<ts.ConditionalExpression>node).condition) ||
-                visitNode(cbNode, (<ts.ConditionalExpression>node).questionToken) ||
-                visitNode(cbNode, (<ts.ConditionalExpression>node).whenTrue) ||
-                visitNode(cbNode, (<ts.ConditionalExpression>node).colonToken) ||
-                visitNode(cbNode, (<ts.ConditionalExpression>node).whenFalse);
+            (<ts.ConditionalExpression>node).condition = callback((<ts.ConditionalExpression>node).condition);
+            (<ts.ConditionalExpression>node).questionToken = callback((<ts.ConditionalExpression>node).questionToken);
+            (<ts.ConditionalExpression>node).whenTrue = callback((<ts.ConditionalExpression>node).whenTrue);
+            (<ts.ConditionalExpression>node).colonToken = callback((<ts.ConditionalExpression>node).colonToken);
+            (<ts.ConditionalExpression>node).whenFalse = callback((<ts.ConditionalExpression>node).whenFalse);
+            return;
         case ts.SyntaxKind.SpreadElementExpression:
-            return visitNode(cbNode, (<ts.SpreadElementExpression>node).expression);
+            (<ts.SpreadElementExpression>node).expression = callback((<ts.SpreadElementExpression>node).expression);
+            return;
         case ts.SyntaxKind.Block:
         case ts.SyntaxKind.ModuleBlock:
-            return visitNodes(cbNodes, (<ts.Block>node).statements);
+            mapArray((<ts.Block>node).statements, callback);
+            return;
         case ts.SyntaxKind.SourceFile:
-            return visitNodes(cbNodes, (<ts.SourceFile>node).statements) ||
-                visitNode(cbNode, (<ts.SourceFile>node).endOfFileToken);
+            mapArray((<ts.SourceFile>node).statements, callback);
+            (<ts.SourceFile>node).endOfFileToken = callback((<ts.SourceFile>node).endOfFileToken);
+            return;
         case ts.SyntaxKind.VariableStatement:
-            return visitNodes(cbNodes, node.decorators) ||
-                visitNodes(cbNodes, node.modifiers) ||
-                visitNode(cbNode, (<ts.VariableStatement>node).declarationList);
+            mapArray(node.decorators, callback);
+            mapArray(node.modifiers, callback);
+            (<ts.VariableStatement>node).declarationList = callback((<ts.VariableStatement>node).declarationList);
+            return;
         case ts.SyntaxKind.VariableDeclarationList:
-            return visitNodes(cbNodes, (<ts.VariableDeclarationList>node).declarations);
+            mapArray((<ts.VariableDeclarationList>node).declarations, callback);
+            return;
         case ts.SyntaxKind.ExpressionStatement:
-            return visitNode(cbNode, (<ts.ExpressionStatement>node).expression);
+            (<ts.ExpressionStatement>node).expression = callback((<ts.ExpressionStatement>node).expression);
+            return;
         case ts.SyntaxKind.IfStatement:
-            return visitNode(cbNode, (<ts.IfStatement>node).expression) ||
-                visitNode(cbNode, (<ts.IfStatement>node).thenStatement) ||
-                visitNode(cbNode, (<ts.IfStatement>node).elseStatement);
+            (<ts.IfStatement>node).expression = callback((<ts.IfStatement>node).expression);
+            (<ts.IfStatement>node).thenStatement = callback((<ts.IfStatement>node).thenStatement);
+            (<ts.IfStatement>node).elseStatement = callback((<ts.IfStatement>node).elseStatement);
+            return;
         case ts.SyntaxKind.DoStatement:
-            return visitNode(cbNode, (<ts.DoStatement>node).statement) ||
-                visitNode(cbNode, (<ts.DoStatement>node).expression);
+            (<ts.DoStatement>node).statement = callback((<ts.DoStatement>node).statement);
+            (<ts.DoStatement>node).expression = callback((<ts.DoStatement>node).expression);
+            return;
         case ts.SyntaxKind.WhileStatement:
-            return visitNode(cbNode, (<ts.WhileStatement>node).expression) ||
-                visitNode(cbNode, (<ts.WhileStatement>node).statement);
+            (<ts.WhileStatement>node).expression = callback((<ts.WhileStatement>node).expression);
+            (<ts.WhileStatement>node).statement = callback((<ts.WhileStatement>node).statement);
+            return;
         case ts.SyntaxKind.ForStatement:
-            return visitNode(cbNode, (<ts.ForStatement>node).initializer) ||
-                visitNode(cbNode, (<ts.ForStatement>node).condition) ||
-                visitNode(cbNode, (<ts.ForStatement>node).incrementor) ||
-                visitNode(cbNode, (<ts.ForStatement>node).statement);
+            (<ts.ForStatement>node).initializer = callback((<ts.ForStatement>node).initializer);
+            (<ts.ForStatement>node).condition = callback((<ts.ForStatement>node).condition);
+            (<ts.ForStatement>node).incrementor = callback((<ts.ForStatement>node).incrementor);
+            (<ts.ForStatement>node).statement = callback((<ts.ForStatement>node).statement);
+            return;
         case ts.SyntaxKind.ForInStatement:
-            return visitNode(cbNode, (<ts.ForInStatement>node).initializer) ||
-                visitNode(cbNode, (<ts.ForInStatement>node).expression) ||
-                visitNode(cbNode, (<ts.ForInStatement>node).statement);
+            (<ts.ForInStatement>node).initializer = callback((<ts.ForInStatement>node).initializer);
+            (<ts.ForInStatement>node).expression = callback((<ts.ForInStatement>node).expression);
+            (<ts.ForInStatement>node).statement = callback((<ts.ForInStatement>node).statement);
+            return;
         case ts.SyntaxKind.ForOfStatement:
-            return visitNode(cbNode, (<ts.ForOfStatement>node).initializer) ||
-                visitNode(cbNode, (<ts.ForOfStatement>node).expression) ||
-                visitNode(cbNode, (<ts.ForOfStatement>node).statement);
+            (<ts.ForOfStatement>node).initializer = callback((<ts.ForOfStatement>node).initializer);
+            (<ts.ForOfStatement>node).expression = callback((<ts.ForOfStatement>node).expression);
+            (<ts.ForOfStatement>node).statement = callback((<ts.ForOfStatement>node).statement);
+            return;
         case ts.SyntaxKind.ContinueStatement:
         case ts.SyntaxKind.BreakStatement:
-            return visitNode(cbNode, (<ts.BreakOrContinueStatement>node).label);
+            (<ts.BreakOrContinueStatement>node).label = callback((<ts.BreakOrContinueStatement>node).label);
+            return;
         case ts.SyntaxKind.ReturnStatement:
-            return visitNode(cbNode, (<ts.ReturnStatement>node).expression);
+            (<ts.ReturnStatement>node).expression = callback((<ts.ReturnStatement>node).expression);
+            return;
         case ts.SyntaxKind.WithStatement:
-            return visitNode(cbNode, (<ts.WithStatement>node).expression) ||
-                visitNode(cbNode, (<ts.WithStatement>node).statement);
+            (<ts.WithStatement>node).expression = callback((<ts.WithStatement>node).expression);
+            (<ts.WithStatement>node).statement = callback((<ts.WithStatement>node).statement);
+            return;
         case ts.SyntaxKind.SwitchStatement:
-            return visitNode(cbNode, (<ts.SwitchStatement>node).expression) ||
-                visitNode(cbNode, (<ts.SwitchStatement>node).caseBlock);
+            (<ts.SwitchStatement>node).expression = callback((<ts.SwitchStatement>node).expression);
+            (<ts.SwitchStatement>node).caseBlock = callback((<ts.SwitchStatement>node).caseBlock);
+            return;
         case ts.SyntaxKind.CaseBlock:
-            return visitNodes(cbNodes, (<ts.CaseBlock>node).clauses);
+            mapArray((<ts.CaseBlock>node).clauses, callback);
+            return;
         case ts.SyntaxKind.CaseClause:
-            return visitNode(cbNode, (<ts.CaseClause>node).expression) ||
-                visitNodes(cbNodes, (<ts.CaseClause>node).statements);
+            (<ts.CaseClause>node).expression = callback((<ts.CaseClause>node).expression);
+            mapArray((<ts.CaseClause>node).statements, callback);
+            return;
         case ts.SyntaxKind.DefaultClause:
-            return visitNodes(cbNodes, (<ts.DefaultClause>node).statements);
+            mapArray((<ts.DefaultClause>node).statements, callback);
+            return;
         case ts.SyntaxKind.LabeledStatement:
-            return visitNode(cbNode, (<ts.LabeledStatement>node).label) ||
-                visitNode(cbNode, (<ts.LabeledStatement>node).statement);
+            (<ts.LabeledStatement>node).label = callback((<ts.LabeledStatement>node).label);
+            (<ts.LabeledStatement>node).statement = callback((<ts.LabeledStatement>node).statement);
+            return;
         case ts.SyntaxKind.ThrowStatement:
-            return visitNode(cbNode, (<ts.ThrowStatement>node).expression);
+            (<ts.ThrowStatement>node).expression = callback((<ts.ThrowStatement>node).expression);
+            return;
         case ts.SyntaxKind.TryStatement:
-            return visitNode(cbNode, (<ts.TryStatement>node).tryBlock) ||
-                visitNode(cbNode, (<ts.TryStatement>node).catchClause) ||
-                visitNode(cbNode, (<ts.TryStatement>node).finallyBlock);
+            (<ts.TryStatement>node).tryBlock = callback((<ts.TryStatement>node).tryBlock);
+            (<ts.TryStatement>node).catchClause = callback((<ts.TryStatement>node).catchClause);
+            (<ts.TryStatement>node).finallyBlock = callback((<ts.TryStatement>node).finallyBlock);
+            return;
         case ts.SyntaxKind.CatchClause:
-            return visitNode(cbNode, (<ts.CatchClause>node).variableDeclaration) ||
-                visitNode(cbNode, (<ts.CatchClause>node).block);
+            (<ts.CatchClause>node).variableDeclaration = callback((<ts.CatchClause>node).variableDeclaration);
+            (<ts.CatchClause>node).block = callback((<ts.CatchClause>node).block);
+            return;
         case ts.SyntaxKind.Decorator:
-            return visitNode(cbNode, (<ts.Decorator>node).expression);
+            (<ts.Decorator>node).expression = callback((<ts.Decorator>node).expression);
+            return;
         case ts.SyntaxKind.ClassDeclaration:
         case ts.SyntaxKind.ClassExpression:
-            return visitNodes(cbNodes, node.decorators) ||
-                visitNodes(cbNodes, node.modifiers) ||
-                visitNode(cbNode, (<ts.ClassLikeDeclaration>node).name) ||
-                visitNodes(cbNodes, (<ts.ClassLikeDeclaration>node).typeParameters) ||
-                visitNodes(cbNodes, (<ts.ClassLikeDeclaration>node).heritageClauses) ||
-                visitNodes(cbNodes, (<ts.ClassLikeDeclaration>node).members);
+            mapArray(node.decorators, callback);
+            mapArray(node.modifiers, callback);
+            (<ts.ClassLikeDeclaration>node).name = callback((<ts.ClassLikeDeclaration>node).name);
+            mapArray((<ts.ClassLikeDeclaration>node).typeParameters, callback);
+            mapArray((<ts.ClassLikeDeclaration>node).heritageClauses, callback);
+            mapArray((<ts.ClassLikeDeclaration>node).members, callback);
+            return;
         case ts.SyntaxKind.InterfaceDeclaration:
-            return visitNodes(cbNodes, node.decorators) ||
-                visitNodes(cbNodes, node.modifiers) ||
-                visitNode(cbNode, (<ts.InterfaceDeclaration>node).name) ||
-                visitNodes(cbNodes, (<ts.InterfaceDeclaration>node).typeParameters) ||
-                visitNodes(cbNodes, (<ts.ClassDeclaration>node).heritageClauses) ||
-                visitNodes(cbNodes, (<ts.InterfaceDeclaration>node).members);
+            mapArray(node.decorators, callback);
+            mapArray(node.modifiers, callback);
+            (<ts.InterfaceDeclaration>node).name = callback((<ts.InterfaceDeclaration>node).name);
+            mapArray((<ts.InterfaceDeclaration>node).typeParameters, callback);
+            mapArray((<ts.ClassDeclaration>node).heritageClauses, callback);
+            mapArray((<ts.InterfaceDeclaration>node).members, callback);
+            return;
         case ts.SyntaxKind.TypeAliasDeclaration:
-            return visitNodes(cbNodes, node.decorators) ||
-                visitNodes(cbNodes, node.modifiers) ||
-                visitNode(cbNode, (<ts.TypeAliasDeclaration>node).name) ||
-                visitNodes(cbNodes, (<ts.TypeAliasDeclaration>node).typeParameters) ||
-                visitNode(cbNode, (<ts.TypeAliasDeclaration>node).type);
+            mapArray(node.decorators, callback);
+            mapArray(node.modifiers, callback);
+            (<ts.TypeAliasDeclaration>node).name = callback((<ts.TypeAliasDeclaration>node).name);
+            mapArray((<ts.TypeAliasDeclaration>node).typeParameters, callback);
+            (<ts.TypeAliasDeclaration>node).type = callback((<ts.TypeAliasDeclaration>node).type);
+            return;
         case ts.SyntaxKind.EnumDeclaration:
-            return visitNodes(cbNodes, node.decorators) ||
-                visitNodes(cbNodes, node.modifiers) ||
-                visitNode(cbNode, (<ts.EnumDeclaration>node).name) ||
-                visitNodes(cbNodes, (<ts.EnumDeclaration>node).members);
+            mapArray(node.decorators, callback);
+            mapArray(node.modifiers, callback);
+            (<ts.EnumDeclaration>node).name = callback((<ts.EnumDeclaration>node).name);
+            mapArray((<ts.EnumDeclaration>node).members, callback);
+            return;
         case ts.SyntaxKind.EnumMember:
-            return visitNode(cbNode, (<ts.EnumMember>node).name) ||
-                visitNode(cbNode, (<ts.EnumMember>node).initializer);
+            (<ts.EnumMember>node).name = callback((<ts.EnumMember>node).name);
+            (<ts.EnumMember>node).initializer = callback((<ts.EnumMember>node).initializer);
+            return;
         case ts.SyntaxKind.ModuleDeclaration:
-            return visitNodes(cbNodes, node.decorators) ||
-                visitNodes(cbNodes, node.modifiers) ||
-                visitNode(cbNode, (<ts.ModuleDeclaration>node).name) ||
-                visitNode(cbNode, (<ts.ModuleDeclaration>node).body);
+            mapArray(node.decorators, callback);
+            mapArray(node.modifiers, callback);
+            (<ts.ModuleDeclaration>node).name = callback((<ts.ModuleDeclaration>node).name);
+            (<ts.ModuleDeclaration>node).body = callback((<ts.ModuleDeclaration>node).body);
+            return;
         case ts.SyntaxKind.ImportEqualsDeclaration:
-            return visitNodes(cbNodes, node.decorators) ||
-                visitNodes(cbNodes, node.modifiers) ||
-                visitNode(cbNode, (<ts.ImportEqualsDeclaration>node).name) ||
-                visitNode(cbNode, (<ts.ImportEqualsDeclaration>node).moduleReference);
+            mapArray(node.decorators, callback);
+            mapArray(node.modifiers, callback);
+            (<ts.ImportEqualsDeclaration>node).name = callback((<ts.ImportEqualsDeclaration>node).name);
+            (<ts.ImportEqualsDeclaration>node).moduleReference = callback((<ts.ImportEqualsDeclaration>node).moduleReference);
+            return;
         case ts.SyntaxKind.ImportDeclaration:
-            return visitNodes(cbNodes, node.decorators) ||
-                visitNodes(cbNodes, node.modifiers) ||
-                visitNode(cbNode, (<ts.ImportDeclaration>node).importClause) ||
-                visitNode(cbNode, (<ts.ImportDeclaration>node).moduleSpecifier);
+            mapArray(node.decorators, callback);
+            mapArray(node.modifiers, callback);
+            (<ts.ImportDeclaration>node).importClause = callback((<ts.ImportDeclaration>node).importClause);
+            (<ts.ImportDeclaration>node).moduleSpecifier = callback((<ts.ImportDeclaration>node).moduleSpecifier);
+            return;
         case ts.SyntaxKind.ImportClause:
-            return visitNode(cbNode, (<ts.ImportClause>node).name) ||
-                visitNode(cbNode, (<ts.ImportClause>node).namedBindings);
-        case ts.SyntaxKind.NamespaceExportDeclaration:
-            return visitNode(cbNode, (<ts.NamespaceExportDeclaration>node).name);
+            (<ts.ImportClause>node).name = callback((<ts.ImportClause>node).name);
+            (<ts.ImportClause>node).namedBindings = callback((<ts.ImportClause>node).namedBindings);
+            return;
 
         case ts.SyntaxKind.NamespaceImport:
-            return visitNode(cbNode, (<ts.NamespaceImport>node).name);
+            (<ts.NamespaceImport>node).name = callback((<ts.NamespaceImport>node).name);
+            return;
         case ts.SyntaxKind.NamedImports:
         case ts.SyntaxKind.NamedExports:
-            return visitNodes(cbNodes, (<ts.NamedImportsOrExports>node).elements);
+            mapArray((<ts.NamedImportsOrExports>node).elements, callback);
+            return;
         case ts.SyntaxKind.ExportDeclaration:
-            return visitNodes(cbNodes, node.decorators) ||
-                visitNodes(cbNodes, node.modifiers) ||
-                visitNode(cbNode, (<ts.ExportDeclaration>node).exportClause) ||
-                visitNode(cbNode, (<ts.ExportDeclaration>node).moduleSpecifier);
+            mapArray(node.decorators, callback);
+            mapArray(node.modifiers, callback);
+            (<ts.ExportDeclaration>node).exportClause = callback((<ts.ExportDeclaration>node).exportClause);
+            (<ts.ExportDeclaration>node).moduleSpecifier = callback((<ts.ExportDeclaration>node).moduleSpecifier);
+            return;
         case ts.SyntaxKind.ImportSpecifier:
         case ts.SyntaxKind.ExportSpecifier:
-            return visitNode(cbNode, (<ts.ImportOrExportSpecifier>node).propertyName) ||
-                visitNode(cbNode, (<ts.ImportOrExportSpecifier>node).name);
+            (<ts.ImportOrExportSpecifier>node).propertyName = callback((<ts.ImportOrExportSpecifier>node).propertyName);
+            (<ts.ImportOrExportSpecifier>node).name = callback((<ts.ImportOrExportSpecifier>node).name);
+            return;
         case ts.SyntaxKind.ExportAssignment:
-            return visitNodes(cbNodes, node.decorators) ||
-                visitNodes(cbNodes, node.modifiers) ||
-                visitNode(cbNode, (<ts.ExportAssignment>node).expression);
+            mapArray(node.decorators, callback);
+            mapArray(node.modifiers, callback);
+            (<ts.ExportAssignment>node).expression = callback((<ts.ExportAssignment>node).expression);
+            return;
         case ts.SyntaxKind.TemplateExpression:
-            return visitNode(cbNode, (<ts.TemplateExpression>node).head) || visitNodes(cbNodes, (<ts.TemplateExpression>node).templateSpans);
+            mapArray((<ts.TemplateExpression>node).templateSpans, callback);
+            (<ts.TemplateExpression>node).head = callback((<ts.TemplateExpression>node).head);
+            return;
         case ts.SyntaxKind.TemplateSpan:
-            return visitNode(cbNode, (<ts.TemplateSpan>node).expression) || visitNode(cbNode, (<ts.TemplateSpan>node).literal);
+            (<ts.TemplateSpan>node).expression = callback((<ts.TemplateSpan>node).expression);
+            (<ts.TemplateSpan>node).literal = callback((<ts.TemplateSpan>node).literal);
+            return;
         case ts.SyntaxKind.ComputedPropertyName:
-            return visitNode(cbNode, (<ts.ComputedPropertyName>node).expression);
+            (<ts.ComputedPropertyName>node).expression = callback((<ts.ComputedPropertyName>node).expression);
+            return;
         case ts.SyntaxKind.HeritageClause:
-            return visitNodes(cbNodes, (<ts.HeritageClause>node).types);
+            mapArray((<ts.HeritageClause>node).types, callback);
+            return;
         case ts.SyntaxKind.ExpressionWithTypeArguments:
-            return visitNode(cbNode, (<ts.ExpressionWithTypeArguments>node).expression) ||
-                visitNodes(cbNodes, (<ts.ExpressionWithTypeArguments>node).typeArguments);
+            (<ts.ExpressionWithTypeArguments>node).expression = callback((<ts.ExpressionWithTypeArguments>node).expression);
+            mapArray((<ts.ExpressionWithTypeArguments>node).typeArguments, callback);
+            return;
         case ts.SyntaxKind.ExternalModuleReference:
-            return visitNode(cbNode, (<ts.ExternalModuleReference>node).expression);
+            (<ts.ExternalModuleReference>node).expression = callback((<ts.ExternalModuleReference>node).expression);
+            return;
         case ts.SyntaxKind.MissingDeclaration:
-            return visitNodes(cbNodes, node.decorators);
+            mapArray(node.decorators, callback);
+            return;
 
         case ts.SyntaxKind.JsxElement:
-            return visitNode(cbNode, (<ts.JsxElement>node).openingElement) ||
-                visitNodes(cbNodes, (<ts.JsxElement>node).children) ||
-                visitNode(cbNode, (<ts.JsxElement>node).closingElement);
+            (<ts.JsxElement>node).openingElement = callback((<ts.JsxElement>node).openingElement);
+            mapArray((<ts.JsxElement>node).children, callback);
+            (<ts.JsxElement>node).closingElement = callback((<ts.JsxElement>node).closingElement);
+            return;
         case ts.SyntaxKind.JsxSelfClosingElement:
         case ts.SyntaxKind.JsxOpeningElement:
-            return visitNode(cbNode, (<ts.JsxOpeningLikeElement>node).tagName) ||
-                visitNodes(cbNodes, (<ts.JsxOpeningLikeElement>node).attributes);
+            (<ts.JsxOpeningLikeElement>node).tagName = callback((<ts.JsxOpeningLikeElement>node).tagName);
+            mapArray((<ts.JsxOpeningLikeElement>node).attributes, callback);
+            return;
         case ts.SyntaxKind.JsxAttribute:
-            return visitNode(cbNode, (<ts.JsxAttribute>node).name) ||
-                visitNode(cbNode, (<ts.JsxAttribute>node).initializer);
+            (<ts.JsxAttribute>node).name = callback((<ts.JsxAttribute>node).name);
+            (<ts.JsxAttribute>node).initializer = callback((<ts.JsxAttribute>node).initializer);
+            return;
         case ts.SyntaxKind.JsxSpreadAttribute:
-            return visitNode(cbNode, (<ts.JsxSpreadAttribute>node).expression);
+            (<ts.JsxSpreadAttribute>node).expression = callback((<ts.JsxSpreadAttribute>node).expression);
+            return;
         case ts.SyntaxKind.JsxExpression:
-            return visitNode(cbNode, (<ts.JsxExpression>node).expression);
+            (<ts.JsxExpression>node).expression = callback((<ts.JsxExpression>node).expression);
+            return;
         case ts.SyntaxKind.JsxClosingElement:
-            return visitNode(cbNode, (<ts.JsxClosingElement>node).tagName);
+            (<ts.JsxClosingElement>node).tagName = callback((<ts.JsxClosingElement>node).tagName);
+            return;
 
         case ts.SyntaxKind.JSDocTypeExpression:
-            return visitNode(cbNode, (<ts.JSDocTypeExpression>node).type);
+            (<ts.JSDocTypeExpression>node).type = callback((<ts.JSDocTypeExpression>node).type);
+            return;
         case ts.SyntaxKind.JSDocUnionType:
-            return visitNodes(cbNodes, (<ts.JSDocUnionType>node).types);
+            mapArray((<ts.JSDocUnionType>node).types, callback);
+            return;
         case ts.SyntaxKind.JSDocTupleType:
-            return visitNodes(cbNodes, (<ts.JSDocTupleType>node).types);
+            mapArray((<ts.JSDocTupleType>node).types, callback);
+            return;
         case ts.SyntaxKind.JSDocArrayType:
-            return visitNode(cbNode, (<ts.JSDocArrayType>node).elementType);
+            (<ts.JSDocArrayType>node).elementType = callback((<ts.JSDocArrayType>node).elementType);
+            return;
         case ts.SyntaxKind.JSDocNonNullableType:
-            return visitNode(cbNode, (<ts.JSDocNonNullableType>node).type);
+            (<ts.JSDocNonNullableType>node).type = callback((<ts.JSDocNonNullableType>node).type);
+            return;
         case ts.SyntaxKind.JSDocNullableType:
-            return visitNode(cbNode, (<ts.JSDocNullableType>node).type);
+            (<ts.JSDocNullableType>node).type = callback((<ts.JSDocNullableType>node).type);
+            return;
         case ts.SyntaxKind.JSDocRecordType:
-            return visitNodes(cbNodes, (<ts.JSDocRecordType>node).members);
+            mapArray((<ts.JSDocRecordType>node).members, callback);
+            return;
         case ts.SyntaxKind.JSDocTypeReference:
-            return visitNode(cbNode, (<ts.JSDocTypeReference>node).name) ||
-                visitNodes(cbNodes, (<ts.JSDocTypeReference>node).typeArguments);
+            (<ts.JSDocTypeReference>node).name = callback((<ts.JSDocTypeReference>node).name);
+            mapArray((<ts.JSDocTypeReference>node).typeArguments, callback);
+            return;
         case ts.SyntaxKind.JSDocOptionalType:
-            return visitNode(cbNode, (<ts.JSDocOptionalType>node).type);
+            (<ts.JSDocOptionalType>node).type = callback((<ts.JSDocOptionalType>node).type);
+            return;
         case ts.SyntaxKind.JSDocFunctionType:
-            return visitNodes(cbNodes, (<ts.JSDocFunctionType>node).parameters) ||
-                visitNode(cbNode, (<ts.JSDocFunctionType>node).type);
+            mapArray((<ts.JSDocFunctionType>node).parameters, callback);
+            (<ts.JSDocFunctionType>node).type = callback((<ts.JSDocFunctionType>node).type);
+            return;
         case ts.SyntaxKind.JSDocVariadicType:
-            return visitNode(cbNode, (<ts.JSDocVariadicType>node).type);
+            (<ts.JSDocVariadicType>node).type = callback((<ts.JSDocVariadicType>node).type);
+            return;
         case ts.SyntaxKind.JSDocConstructorType:
-            return visitNode(cbNode, (<ts.JSDocConstructorType>node).type);
+            (<ts.JSDocConstructorType>node).type = callback((<ts.JSDocConstructorType>node).type);
+            return;
         case ts.SyntaxKind.JSDocThisType:
-            return visitNode(cbNode, (<ts.JSDocThisType>node).type);
+            (<ts.JSDocThisType>node).type = callback((<ts.JSDocThisType>node).type);
+            return;
         case ts.SyntaxKind.JSDocRecordMember:
-            return visitNode(cbNode, (<ts.JSDocRecordMember>node).name) ||
-                visitNode(cbNode, (<ts.JSDocRecordMember>node).type);
+            (<ts.JSDocRecordMember>node).name = callback((<ts.JSDocRecordMember>node).name);
+            (<ts.JSDocRecordMember>node).type = callback((<ts.JSDocRecordMember>node).type);
+            return;
         case ts.SyntaxKind.JSDocComment:
-            return visitNodes(cbNodes, (<ts.JSDocComment>node).tags);
+            mapArray((<ts.JSDocComment>node).tags, callback);
+            return;
         case ts.SyntaxKind.JSDocParameterTag:
-            return visitNode(cbNode, (<ts.JSDocParameterTag>node).preParameterName) ||
-                visitNode(cbNode, (<ts.JSDocParameterTag>node).typeExpression) ||
-                visitNode(cbNode, (<ts.JSDocParameterTag>node).postParameterName);
+            (<ts.JSDocParameterTag>node).preParameterName = callback((<ts.JSDocParameterTag>node).preParameterName);
+            (<ts.JSDocParameterTag>node).typeExpression = callback((<ts.JSDocParameterTag>node).typeExpression);
+            (<ts.JSDocParameterTag>node).postParameterName = callback((<ts.JSDocParameterTag>node).postParameterName);
+            return;
         case ts.SyntaxKind.JSDocReturnTag:
-            return visitNode(cbNode, (<ts.JSDocReturnTag>node).typeExpression);
+            (<ts.JSDocReturnTag>node).typeExpression = callback((<ts.JSDocReturnTag>node).typeExpression);
+            return;
         case ts.SyntaxKind.JSDocTypeTag:
-            return visitNode(cbNode, (<ts.JSDocTypeTag>node).typeExpression);
+            (<ts.JSDocTypeTag>node).typeExpression = callback((<ts.JSDocTypeTag>node).typeExpression);
+            return;
         case ts.SyntaxKind.JSDocTemplateTag:
-            return visitNodes(cbNodes, (<ts.JSDocTemplateTag>node).typeParameters);
-        case ts.SyntaxKind.JSDocTypedefTag:
-            return visitNode(cbNode, (<ts.JSDocTypedefTag>node).typeExpression) ||
-                visitNode(cbNode, (<ts.JSDocTypedefTag>node).name) ||
-                visitNode(cbNode, (<ts.JSDocTypedefTag>node).jsDocTypeLiteral);
-        case ts.SyntaxKind.JSDocTypeLiteral:
-            return visitNodes(cbNodes, (<ts.JSDocTypeLiteral>node).jsDocPropertyTags);
-        case ts.SyntaxKind.JSDocPropertyTag:
-            return visitNode(cbNode, (<ts.JSDocPropertyTag>node).typeExpression) ||
-                visitNode(cbNode, (<ts.JSDocPropertyTag>node).name);
+            mapArray((<ts.JSDocTemplateTag>node).typeParameters, callback);
+            return;
     }
 }
 
@@ -447,10 +561,11 @@ function mapChild(node: ts.Node, callback: typeof MapCallback) {
  * @param callback 回调函数。函数返回用于更新的节点，如果函数返回 null，说明删除当前节点。
  */
 function mapArray<T extends ts.Node>(nodes: ts.NodeArray<T>, callback: typeof MapCallback) {
+    if (!nodes) return;
     for (let i = 0; i < nodes.length; i++) {
         nodes[i] = callback(nodes[i]);
         if (nodes[i] == null) {
-
+            nodes.splice(i--, 1);
         }
     }
 }
